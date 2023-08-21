@@ -6,5 +6,7 @@
 #include <winrt/Windows.Media.Audio.h>
 #include <winrt/Windows.Storage.h>
 
+#include <Mfapi.h>
+
 #include <chrono>
 #include <format>

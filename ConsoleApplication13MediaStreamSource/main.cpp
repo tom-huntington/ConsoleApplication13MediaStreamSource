@@ -1,70 +1,46 @@
 ﻿#include "pch.h"
 
+#pragma comment(lib, "Mfuuid.lib")
+
 using namespace winrt;
 using namespace Windows::Foundation;
 constexpr auto SAMPLE_RATE = 16'000;
 constexpr auto BITS_PER_COMPRESSED_SAMPLE = 16;
 
+
+
 int main()
 {
-    using namespace winrt::Windows::Media::Audio;
-    AudioGraphSettings settings{ winrt::Windows::Media::Render::AudioRenderCategory::Media };
-    auto encoding = winrt::Windows::Media::MediaProperties::AudioEncodingProperties{};
-    encoding.BitsPerSample(32);
-    encoding.ChannelCount(1);
-    encoding.SampleRate(48'000);
-    encoding.Bitrate(encoding.BitsPerSample() * encoding.ChannelCount() * encoding.SampleRate());
-    encoding.Subtype(L"Float");
-    //encoding.Type(encodingInput.Type());
+    using namespace winrt::Windows::Media::MediaProperties;
 
-    settings.EncodingProperties(encoding);
-    settings.PrimaryRenderDevice(nullptr);
-    auto codec_settings = settings.EncodingProperties();
-    CreateAudioGraphResult result0 = AudioGraph::CreateAsync(settings).get();
-    WINRT_ASSERT(result0.Status() == AudioGraphCreationStatus::Success);
+    auto propsB = MediaEncodingProfile::CreateMp4(VideoEncodingQuality::Auto).Video().Properties();
+    auto propsA = VideoEncodingProperties::CreateH264().Properties();
+        
 
-    encoding.BitsPerSample(32);
-    encoding.ChannelCount(2);
-    encoding.SampleRate(48'000);
-    encoding.Bitrate(encoding.BitsPerSample() * encoding.ChannelCount() * encoding.SampleRate());
-    CreateAudioGraphResult result = AudioGraph::CreateAsync(settings).get();
-    auto status = result.Status();
-    auto error = result.ExtendedError();
-    WINRT_ASSERT(result.Status() == AudioGraphCreationStatus::Success);
+    auto fn = [propsB, propsA]<typename T>(GUID const& guid) {
+        auto a = propsA.HasKey(guid) ? propsA.Lookup(guid).as<Windows::Foundation::IPropertyValue>() : Windows::Foundation::IPropertyValue{};
+        auto b = propsA.HasKey(guid) ? propsB.Lookup(guid).as<Windows::Foundation::IPropertyValue>() : Windows::Foundation::IPropertyValue{};
+        if constexpr (std::is_same_v<T, UINT32>)
+            return std::array<std::optional<T>, 2> { a ? a.GetUInt32() : std::optional<T>{}, b ? b.GetUInt32() : std::optional<T>{} };
+        if constexpr (std::is_same_v<T, GUID>)
+            return std::array<std::optional<winrt::guid>, 2> { a ? a.GetGuid() : std::optional<winrt::guid>{}, b ? b.GetGuid() : std::optional<winrt::guid>{} };
+        if constexpr (std::is_same_v<T, UINT64>)
+            return std::array<std::optional<T>, 2>{ a ? a.GetUInt64() : std::optional<T>{}, b ? b.GetUInt64() : std::optional<T>{} };
 
-    //auto webcam_filename = std::format(L"WebCam{:0>3}", 1);
-    //auto name = std::format(L"Speech School Recordings\\{:%y-%m-%d} Video", std::chrono::system_clock::now());
-    //auto folder = winrt::Windows::Storage::KnownFolders::VideosLibrary().CreateFolderAsync(
-    //    name
-    //    , winrt::Windows::Storage::CreationCollisionOption::GenerateUniqueName).get();
+        throw std::exception("not reached");
+    };
+    auto a = MFVideoFormat_MPEG2;
+    auto b = MFVideoFormat_H265;
+    auto c = MFVideoFormat_H264;
+    auto d = MFVideoFormat_HEVC;
+    auto [a1, a2] = fn.operator() < GUID > (MF_MT_MAJOR_TYPE);
+    auto [b1, b2] = fn.operator() < GUID > (MF_MT_SUBTYPE);
+    auto [c1, c2] = fn.operator() < UINT32 > (MF_MT_AVG_BITRATE);
+    auto [d1, d2] = fn.operator() < UINT64 > (MF_MT_FRAME_RATE);
+    auto [e1, e2] = fn.operator() < UINT64 > (MF_MT_FRAME_SIZE);
+    auto [f1, f2] = fn.operator() < UINT32 > (MF_MT_INTERLACE_MODE);
+    auto [g1, g2] = fn.operator() < UINT32 > (MF_MT_MPEG2_PROFILE);
+    auto [h1, h2] = fn.operator() < UINT32 > (MF_MT_MPEG2_LEVEL);
+    auto [i1, i2] = fn.operator()<UINT64>(MF_MT_PIXEL_ASPECT_RATIO);
 
-    //auto quality = winrt::Windows::Media::MediaProperties::AudioEncodingQuality::Auto;
-    //auto mediaEncodingProfile = Windows::Media::MediaProperties::MediaEncodingProfile::CreateMp3(quality);
-    //auto container = mediaEncodingProfile.Container();
-    //auto encodingOut = Windows::Media::MediaProperties::AudioEncodingProperties::CreateMp3(SAMPLE_RATE, 1, SAMPLE_RATE * BITS_PER_COMPRESSED_SAMPLE);
-    //mediaEncodingProfile.Audio(encodingOut);
-
-    //auto encodingIn = Windows::Media::MediaProperties::AudioEncodingProperties::CreatePcm(SAMPLE_RATE, 1, 32);
-    ///*auto props = audioEncodingPropities.Properties();
-    //for (auto p : props)
-    //{
-    //    auto a = p.Key();
-    //    auto b = p.Value();
-    //}*/
-    //encodingIn.Subtype(Windows::Media::MediaProperties::MediaEncodingSubtypes::Float());
-    ////audioEncodingPropities.BitsPerSample(32);
-    ////audioEncodingPropities.ChannelCount(1);
-    ////audioEncodingPropities.SampleRate(SAMPLE_RATE);
-    ////audioEncodingPropities.Bitrate(audioEncodingPropities.BitsPerSample() * audioEncodingPropities.ChannelCount() * audioEncodingPropities.SampleRate())
-
-    //auto descriptor = Windows::Media::Core::AudioStreamDescriptor(encodingIn);
-    //auto mediaStreamSource = Windows::Media::Core::MediaStreamSource(descriptor);
-    //auto canSeek = mediaStreamSource.CanSeek();
-    //mediaStreamSource.CanSeek(true);
-    //auto canSeek2 = mediaStreamSource.CanSeek();
-
-
-    //mediaStreamSource.Starting([](auto a, auto b) {
-
-    //    });
 }
