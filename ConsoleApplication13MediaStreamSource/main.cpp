@@ -1,46 +1,74 @@
 ﻿#include "pch.h"
 
+
+#include <mfapi.h>
+#include <mfidl.h>
+#include <mfreadwrite.h>
+#include <codecapi.h>
+#include <winrt/Windows.Graphics.h>
+
 #pragma comment(lib, "Mfuuid.lib")
+#pragma comment(lib, "Mfplat.lib")
+#pragma comment(lib, "mfreadwrite.lib")
+#pragma comment(lib, "Mf.lib")
 
 using namespace winrt;
 using namespace Windows::Foundation;
-constexpr auto SAMPLE_RATE = 16'000;
-constexpr auto BITS_PER_COMPRESSED_SAMPLE = 16;
 
-
+static constexpr winrt::Windows::Graphics::SizeInt32 size{1922, 1089};
+static constexpr UINT32 FRAME_RATE{ 60 };
+static constexpr UINT32 BIT_RATE{ 2'000'000 };
+DWORD m_videoStreamIndex{ DWORD(-1) };
 
 int main()
 {
-    using namespace winrt::Windows::Media::MediaProperties;
+    winrt::init_apartment(winrt::apartment_type::multi_threaded);
+    winrt::check_hresult(MFStartup(MF_VERSION, MFSTARTUP_NOSOCKET));
 
-    auto propsB = MediaEncodingProfile::CreateMp4(VideoEncodingQuality::Auto).Video().Properties();
-    auto propsA = VideoEncodingProperties::CreateH264().Properties();
-        
+    winrt::com_ptr<IMFMediaType> m_videoOut;
+    winrt::check_hresult(MFCreateMediaType(m_videoOut.put()));
+    winrt::check_hresult(m_videoOut->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video));
+    winrt::check_hresult(m_videoOut->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264));
+    winrt::check_hresult(m_videoOut->SetUINT32(MF_MT_AVG_BITRATE, BIT_RATE));
+    winrt::check_hresult(MFSetAttributeRatio(m_videoOut.get(), MF_MT_FRAME_RATE, FRAME_RATE, 1));
+    winrt::check_hresult(MFSetAttributeSize(m_videoOut.get(), MF_MT_FRAME_SIZE, size.Width, size.Height));
+    winrt::check_hresult(m_videoOut->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive));
+    winrt::check_hresult(m_videoOut->SetUINT32(MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_Main));
 
-    auto fn = [propsB, propsA]<typename T>(GUID const& guid) {
-        auto a = propsA.HasKey(guid) ? propsA.Lookup(guid).as<Windows::Foundation::IPropertyValue>() : Windows::Foundation::IPropertyValue{};
-        auto b = propsA.HasKey(guid) ? propsB.Lookup(guid).as<Windows::Foundation::IPropertyValue>() : Windows::Foundation::IPropertyValue{};
-        if constexpr (std::is_same_v<T, UINT32>)
-            return std::array<std::optional<T>, 2> { a ? a.GetUInt32() : std::optional<T>{}, b ? b.GetUInt32() : std::optional<T>{} };
-        if constexpr (std::is_same_v<T, GUID>)
-            return std::array<std::optional<winrt::guid>, 2> { a ? a.GetGuid() : std::optional<winrt::guid>{}, b ? b.GetGuid() : std::optional<winrt::guid>{} };
-        if constexpr (std::is_same_v<T, UINT64>)
-            return std::array<std::optional<T>, 2>{ a ? a.GetUInt64() : std::optional<T>{}, b ? b.GetUInt64() : std::optional<T>{} };
+    winrt::com_ptr<IMFMediaType> m_videoIn;
+    winrt::check_hresult(MFCreateMediaType(m_videoIn.put()));
+    winrt::check_hresult(m_videoOut->CopyAllItems(m_videoIn.get()));
+    winrt::check_hresult(m_videoIn->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_ARGB32));
+    winrt::check_hresult(m_videoIn->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT, 1));
 
-        throw std::exception("not reached");
-    };
-    auto a = MFVideoFormat_MPEG2;
-    auto b = MFVideoFormat_H265;
-    auto c = MFVideoFormat_H264;
-    auto d = MFVideoFormat_HEVC;
-    auto [a1, a2] = fn.operator() < GUID > (MF_MT_MAJOR_TYPE);
-    auto [b1, b2] = fn.operator() < GUID > (MF_MT_SUBTYPE);
-    auto [c1, c2] = fn.operator() < UINT32 > (MF_MT_AVG_BITRATE);
-    auto [d1, d2] = fn.operator() < UINT64 > (MF_MT_FRAME_RATE);
-    auto [e1, e2] = fn.operator() < UINT64 > (MF_MT_FRAME_SIZE);
-    auto [f1, f2] = fn.operator() < UINT32 > (MF_MT_INTERLACE_MODE);
-    auto [g1, g2] = fn.operator() < UINT32 > (MF_MT_MPEG2_PROFILE);
-    auto [h1, h2] = fn.operator() < UINT32 > (MF_MT_MPEG2_LEVEL);
-    auto [i1, i2] = fn.operator()<UINT64>(MF_MT_PIXEL_ASPECT_RATIO);
+    winrt::com_ptr<IMFAttributes> m_containter_attributes;
+    winrt::check_hresult(MFCreateAttributes(m_containter_attributes.put(), 6));
+    //winrt::check_hresult(m_containter_attributes->SetUINT32(MF_LOW_LATENCY, 1));
+    //MF_READWRITE_DISABLE_CONVERTERS
+    //MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS
+    //MF_SINK_WRITER_ASYNC_CALLBACK
+    //winrt::check_hresult(m_containter_attributes->SetUINT32(MF_SINK_WRITER_DISABLE_THROTTLING, 1));
+    winrt::check_hresult(m_containter_attributes->SetGUID(MF_TRANSCODE_CONTAINERTYPE, MFTranscodeContainerType_MPEG4));
+    //MFT_FIELDOFUSE_UNLOCK_Attribute
+#if 0
+    winrt::com_ptr<IMFDXGIDeviceManager> devManager;
+    UINT resetToken;
+    winrt::check_hresult(MFCreateDXGIDeviceManager(&resetToken, devManager.put()));
+    winrt::check_hresult(devManager->ResetDevice(m_d3DDevice.get(), resetToken));
+    winrt::check_hresult(m_containter_attributes->SetUnknown(MF_SINK_WRITER_D3D_MANAGER, devManager.get()));
+#endif
 
+    winrt::com_ptr<IMFByteStream> outputStream;
+    winrt::check_hresult(MFCreateFile(MF_ACCESSMODE_READWRITE, MF_OPENMODE_DELETE_IF_EXIST, MF_FILEFLAGS_NONE, L"D:\\Documents\\test.mp4", outputStream.put()));
+    winrt::com_ptr<IMFMediaSink> mp4StreamSink;
+    winrt::check_hresult(MFCreateMPEG4MediaSink(outputStream.get(), m_videoOut.get(), NULL, mp4StreamSink.put()));
+    winrt::com_ptr<IMFSinkWriter> sinkWriter;
+    winrt::check_hresult(MFCreateSinkWriterFromMediaSink(mp4StreamSink.get(), m_containter_attributes.get(), sinkWriter.put()));
+    sinkWriter->SetInputMediaType(0, m_videoIn.get(), nullptr);
+
+    winrt::com_ptr<IMFSinkWriter> pSinkWriterVideo;
+    winrt::check_hresult(MFCreateSinkWriterFromURL(L"D:\\Documents\\test2.mp4", NULL, m_containter_attributes.get(), pSinkWriterVideo.put()));
+    winrt::check_hresult(pSinkWriterVideo->AddStream(m_videoOut.get(), &m_videoStreamIndex));
+    winrt::check_hresult(pSinkWriterVideo->SetInputMediaType(m_videoStreamIndex, m_videoIn.get(), nullptr /*encoder attributes*/));
+    
 }
